@@ -43,13 +43,12 @@
           </label>
 
           <label class="field">
-            <span>目標年数</span>
-            <div class="input-with-unit">
-              <input type="number" id="targetYears" min="1" step="1" inputmode="numeric" required>
-              <span>年</span>
-            </div>
+            <span>目標達成年月</span>
+            <input class="plain-input" type="month" id="targetYearMonth" required>
           </label>
         </div>
+
+        <p class="period-summary" id="targetPeriodSummary" aria-live="polite"></p>
 
         <fieldset class="rate-fieldset">
           <legend>想定利回り3パターン</legend>
@@ -232,7 +231,7 @@
               <thead>
                 <tr>
                   <th>利回り</th>
-                  <th>目標年の予測額</th>
+                  <th>目標達成月時点の予測額</th>
                   <th>目標との差額</th>
                   <th>目標達成に必要な毎月積立額</th>
                   <th>現在の毎月積立額との差額</th>
@@ -248,7 +247,7 @@
           <div class="section-heading">
             <div>
               <h2>入金額増額シナリオ</h2>
-              <p class="section-copy">現在の毎月積立額合計に増額分を足した場合の目標年の予測額です。</p>
+              <p class="section-copy">現在の毎月積立額合計に増額分を足した場合の目標達成月時点の予測額です。</p>
             </div>
           </div>
 

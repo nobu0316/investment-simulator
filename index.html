@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>入金力チェック</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">積立投資シミュレーター</p>
+        <h1>入金力チェック</h1>
+      </div>
+      <p class="header-copy">保有銘柄の合計から、目標達成に必要な積立額と利回りを確認できます。</p>
+    </header>
+
+    <nav class="tab-nav" aria-label="画面切り替え">
+      <button class="tab-button is-active" type="button" data-tab="checkTab">目標達成チェック</button>
+      <button class="tab-button" type="button" data-tab="growthTab">資産推移</button>
+      <button class="tab-button" type="button" data-tab="fundsTab">保有銘柄・積立設定</button>
+      <button class="tab-button" type="button" data-tab="targetTab">目標設定</button>
+    </nav>
+
+    <p class="error-message" id="errorMessage" aria-live="polite"></p>
+
+    <section class="tab-panel is-active" id="targetTab">
+      <form class="input-panel target-panel" id="targetForm" novalidate>
+        <div class="panel-heading">
+          <h2>目標設定</h2>
+          <button class="ghost-button" type="button" id="resetButton">初期化</button>
+        </div>
+
+        <div class="form-grid target-grid">
+          <label class="field">
+            <span>目標金額</span>
+            <div class="input-with-unit">
+              <input type="number" id="targetAmount" min="0" step="10000" inputmode="numeric" required>
+              <span>円</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>目標年数</span>
+            <div class="input-with-unit">
+              <input type="number" id="targetYears" min="1" step="1" inputmode="numeric" required>
+              <span>年</span>
+            </div>
+          </label>
+        </div>
+
+        <fieldset class="rate-fieldset">
+          <legend>想定利回り3パターン</legend>
+          <div class="rate-grid">
+            <label class="field">
+              <span>利回り1</span>
+              <div class="input-with-unit">
+                <input type="number" id="rate1" min="0" step="0.1" inputmode="decimal" required>
+                <span>%</span>
+              </div>
+            </label>
+            <label class="field">
+              <span>利回り2</span>
+              <div class="input-with-unit">
+                <input type="number" id="rate2" min="0" step="0.1" inputmode="decimal" required>
+                <span>%</span>
+              </div>
+            </label>
+            <label class="field">
+              <span>利回り3</span>
+              <div class="input-with-unit">
+                <input type="number" id="rate3" min="0" step="0.1" inputmode="decimal" required>
+                <span>%</span>
+              </div>
+            </label>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+
+    <section class="tab-panel" id="fundsTab">
+      <section class="input-panel">
+        <div class="panel-heading">
+          <h2>保有銘柄・積立設定</h2>
+          <p class="section-copy">銘柄ごとの評価額、入金額、毎月積立額を登録します。</p>
+        </div>
+
+        <form class="fund-form" id="fundForm" novalidate>
+          <input type="hidden" id="fundId">
+
+          <label class="field">
+            <span>銘柄名</span>
+            <input class="plain-input" type="text" id="fundName" required>
+          </label>
+
+          <label class="field">
+            <span>口座区分</span>
+            <select class="plain-input" id="accountType">
+              <option value="NISA">NISA</option>
+              <option value="特定">特定</option>
+              <option value="iDeCo">iDeCo</option>
+              <option value="その他">その他</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>現在評価額</span>
+            <div class="input-with-unit">
+              <input type="number" id="fundCurrentValue" min="0" step="10000" inputmode="numeric" required>
+              <span>円</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>これまでの入金額</span>
+            <div class="input-with-unit">
+              <input type="number" id="fundInvestedAmount" min="0" step="10000" inputmode="numeric" required>
+              <span>円</span>
+            </div>
+          </label>
+
+          <label class="field">
+            <span>毎月積立額</span>
+            <div class="input-with-unit">
+              <input type="number" id="fundMonthlyContribution" min="0" step="1000" inputmode="numeric" required>
+              <span>円</span>
+            </div>
+          </label>
+
+          <label class="field memo-field">
+            <span>メモ</span>
+            <textarea class="plain-input" id="fundMemo" rows="3"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit" id="fundSubmitButton">銘柄を追加</button>
+            <button class="ghost-button" type="button" id="fundCancelButton">キャンセル</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="table-section">
+        <div class="section-heading">
+          <h2>銘柄一覧</h2>
+        </div>
+        <div class="table-wrap">
+          <table class="fund-table">
+            <thead>
+              <tr>
+                <th>銘柄名</th>
+                <th>口座区分</th>
+                <th>現在評価額</th>
+                <th>これまでの入金額</th>
+                <th>評価損益</th>
+                <th>損益率</th>
+                <th>毎月積立額</th>
+                <th>編集</th>
+                <th>削除</th>
+              </tr>
+            </thead>
+            <tbody id="fundTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="result-panel total-panel" aria-live="polite">
+        <div class="section-heading">
+          <h2>合計サマリー</h2>
+        </div>
+        <div class="summary-grid" id="summaryGrid"></div>
+      </section>
+    </section>
+
+    <section class="tab-panel" id="growthTab">
+      <section class="chart-section">
+        <div class="section-heading">
+          <div>
+            <h2>今の積立額で続けた場合の資産推移</h2>
+            <p class="section-copy">銘柄一覧の合計値を使って、元本、各利回り、目標金額ラインを表示します。</p>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-box chart-box-wide">
+            <canvas id="lineChart"></canvas>
+            <p class="chart-fallback" id="lineChartFallback"></p>
+          </div>
+          <div class="chart-box">
+            <canvas id="achievementChart"></canvas>
+            <p class="chart-fallback" id="achievementChartFallback"></p>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="tab-panel" id="checkTab">
+      <section class="check-overview">
+        <div class="section-heading">
+          <div>
+            <h2>目標達成チェック</h2>
+            <p class="section-copy">現在の設定条件をもとに、目標に届くかを確認します。</p>
+          </div>
+          <div class="quick-actions">
+            <button class="ghost-button" type="button" data-go-tab="targetTab">目標設定を変更</button>
+            <button class="ghost-button" type="button" data-go-tab="fundsTab">銘柄・積立額を更新</button>
+          </div>
+        </div>
+        <div class="summary-grid condition-summary-grid" id="conditionSummaryGrid"></div>
+      </section>
+
+      <section class="missing-guide" id="missingGuide">
+        <p>シミュレーションに必要な情報が不足しています。目標設定と保有銘柄・積立設定を入力してください。</p>
+        <div class="quick-actions">
+          <button class="primary-button" type="button" data-go-tab="targetTab">目標設定を入力する</button>
+          <button class="primary-button" type="button" data-go-tab="fundsTab">銘柄・積立額を入力する</button>
+        </div>
+      </section>
+
+      <div id="checkResults">
+        <section class="check-grid">
+          <article class="judgement-card" id="judgementCard"></article>
+          <article class="required-rate-card" id="requiredRateCard"></article>
+        </section>
+
+        <section class="table-section">
+          <div class="section-heading">
+            <h2>利回り別の必要積立額</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>利回り</th>
+                  <th>目標年の予測額</th>
+                  <th>目標との差額</th>
+                  <th>目標達成に必要な毎月積立額</th>
+                  <th>現在の毎月積立額との差額</th>
+                  <th>判定</th>
+                </tr>
+              </thead>
+              <tbody id="resultTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-section">
+          <div class="section-heading">
+            <div>
+              <h2>入金額増額シナリオ</h2>
+              <p class="section-copy">現在の毎月積立額合計に増額分を足した場合の目標年の予測額です。</p>
+            </div>
+          </div>
+
+          <div class="scenario-input-grid">
+            <label class="field">
+              <span>増額シナリオ1</span>
+              <div class="input-with-unit">
+                <input type="number" id="increaseScenario1" min="0" step="1000" inputmode="numeric" required>
+                <span>円</span>
+              </div>
+            </label>
+            <label class="field">
+              <span>増額シナリオ2</span>
+              <div class="input-with-unit">
+                <input type="number" id="increaseScenario2" min="0" step="1000" inputmode="numeric" required>
+                <span>円</span>
+              </div>
+            </label>
+            <label class="field">
+              <span>増額シナリオ3</span>
+              <div class="input-with-unit">
+                <input type="number" id="increaseScenario3" min="0" step="1000" inputmode="numeric" required>
+                <span>円</span>
+              </div>
+            </label>
+          </div>
+
+          <article class="scenario-summary-card" id="increaseScenarioSummary"></article>
+
+          <div class="table-wrap scenario-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>シナリオ</th>
+                  <th>毎月積立額</th>
+                  <th id="scenarioRate1Header">利回り1の予測額</th>
+                  <th id="scenarioRate2Header">利回り2の予測額</th>
+                  <th id="scenarioRate3Header">利回り3の予測額</th>
+                </tr>
+              </thead>
+              <tbody id="increaseScenarioTableBody"></tbody>
+            </table>
+          </div>
+
+          <details class="scenario-chart-details">
+            <summary>グラフで確認</summary>
+            <div class="chart-box chart-box-wide scenario-chart-box">
+              <canvas id="increaseScenarioChart"></canvas>
+              <p class="chart-fallback" id="increaseScenarioChartFallback"></p>
+            </div>
+          </details>
+        </section>
+      </div>
+    </section>
+
+    <footer class="app-footer">
+      本アプリの結果は入力条件に基づく簡易試算であり、将来の運用成果を保証するものではありません。
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

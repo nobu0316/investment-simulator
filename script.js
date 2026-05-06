@@ -2,7 +2,7 @@ const STORAGE_KEY = "depositPowerCheckInputs";
 
 const defaults = {
   targetAmount: 30000000,
-  targetYears: 20,
+  targetYearMonth: addMonthsToYearMonth(currentYearMonth(), 20 * 12),
   rate1: 3,
   rate2: 5,
   rate3: 7,
@@ -24,13 +24,14 @@ function cloneData(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-const targetFields = ["targetAmount", "targetYears", "rate1", "rate2", "rate3"];
+const targetFields = ["targetAmount", "targetYearMonth", "rate1", "rate2", "rate3"];
 const increaseScenarioFields = ["increaseScenario1", "increaseScenario2", "increaseScenario3"];
 const state = cloneData(defaults);
 
 const targetForm = document.getElementById("targetForm");
 const fundForm = document.getElementById("fundForm");
 const errorMessage = document.getElementById("errorMessage");
+const targetPeriodSummary = document.getElementById("targetPeriodSummary");
 const summaryGrid = document.getElementById("summaryGrid");
 const conditionSummaryGrid = document.getElementById("conditionSummaryGrid");
 const missingGuide = document.getElementById("missingGuide");
@@ -63,6 +64,62 @@ const numberFormatter = new Intl.NumberFormat("ja-JP", {
 
 function getElement(id) {
   return document.getElementById(id);
+}
+
+function currentYearMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseYearMonth(value) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(value));
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return null;
+  }
+
+  return { year, month };
+}
+
+function addMonthsToYearMonth(yearMonth, monthsToAdd) {
+  const parsed = parseYearMonth(yearMonth) || parseYearMonth(currentYearMonth());
+  const monthIndex = parsed.year * 12 + (parsed.month - 1) + monthsToAdd;
+  const year = Math.floor(monthIndex / 12);
+  const month = (monthIndex % 12) + 1;
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function monthsBetweenYearMonths(fromYearMonth, toYearMonth) {
+  const from = parseYearMonth(fromYearMonth);
+  const to = parseYearMonth(toYearMonth);
+  if (!from || !to) return null;
+  return (to.year - from.year) * 12 + (to.month - from.month);
+}
+
+function formatYearMonth(value) {
+  const parsed = parseYearMonth(value);
+  if (!parsed) return "";
+  return `${parsed.year}年${parsed.month}月`;
+}
+
+function formatDurationMonths(months) {
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  if (years === 0) return `${remainingMonths}か月（${months}か月）`;
+  if (remainingMonths === 0) return `${years}年（${months}か月）`;
+  return `${years}年${remainingMonths}か月（${months}か月）`;
+}
+
+function durationPointLabel(months) {
+  const years = Math.floor(months / 12);
+  const remainingMonths = months % 12;
+  if (months === 0) return "現在";
+  if (remainingMonths === 0) return `${years}年後`;
+  if (years === 0) return `${remainingMonths}か月後`;
+  return `${years}年${remainingMonths}か月後`;
 }
 
 function formatYen(value) {
@@ -101,7 +158,7 @@ function normalizeNumber(value) {
 
 function readTargetInputs() {
   targetFields.forEach((id) => {
-    state[id] = normalizeNumber(getElement(id).value);
+    state[id] = id === "targetYearMonth" ? getElement(id).value : normalizeNumber(getElement(id).value);
   });
 }
 
@@ -126,9 +183,15 @@ function migrateSavedData(saved) {
     return cloneData(defaults);
   }
 
+  const migratedTargetYearMonth = saved.targetYearMonth || (
+    saved.targetYears
+      ? addMonthsToYearMonth(currentYearMonth(), Math.floor(normalizeNumber(saved.targetYears)) * 12)
+      : defaults.targetYearMonth
+  );
+
   const migrated = {
     targetAmount: normalizeNumber(saved.targetAmount || defaults.targetAmount),
-    targetYears: normalizeNumber(saved.targetYears || defaults.targetYears),
+    targetYearMonth: migratedTargetYearMonth,
     rate1: normalizeNumber(saved.rate1 ?? defaults.rate1),
     rate2: normalizeNumber(saved.rate2 ?? defaults.rate2),
     rate3: normalizeNumber(saved.rate3 ?? defaults.rate3),
@@ -197,7 +260,7 @@ function loadState() {
 function validateTargets() {
   const labels = {
     targetAmount: "目標金額",
-    targetYears: "目標年数",
+    targetYearMonth: "目標達成年月",
     rate1: "利回り1",
     rate2: "利回り2",
     rate3: "利回り3"
@@ -205,6 +268,13 @@ function validateTargets() {
 
   for (const id of targetFields) {
     const rawValue = getElement(id).value.trim();
+    if (id === "targetYearMonth") {
+      if (rawValue === "" || !parseYearMonth(state.targetYearMonth)) {
+        return "目標達成年月を正しく入力してください。";
+      }
+      continue;
+    }
+
     if (rawValue === "" || !Number.isFinite(state[id])) {
       return `${labels[id]}を正しく入力してください。`;
     }
@@ -213,8 +283,9 @@ function validateTargets() {
     }
   }
 
-  if (!Number.isInteger(state.targetYears) || state.targetYears < 1) {
-    return "目標年数は1年以上の整数で入力してください。";
+  const targetMonths = monthsBetweenYearMonths(currentYearMonth(), state.targetYearMonth);
+  if (targetMonths === null || targetMonths <= 0) {
+    return "目標達成年月は現在より後の年月を入力してください。";
   }
 
   if (state.targetAmount <= 0) {
@@ -285,9 +356,11 @@ function aggregateFunds() {
 }
 
 function calculationValues() {
+  const targetMonths = monthsBetweenYearMonths(currentYearMonth(), state.targetYearMonth) || 0;
   return {
     targetAmount: state.targetAmount,
-    targetYears: Math.floor(state.targetYears),
+    targetYearMonth: state.targetYearMonth,
+    targetMonths,
     rate1: state.rate1,
     rate2: state.rate2,
     rate3: state.rate3,
@@ -303,8 +376,7 @@ function monthlyRate(annualRate) {
   return annualRate / 100 / 12;
 }
 
-function futureValue(currentValue, monthlyContribution, years, annualRate) {
-  const months = years * 12;
+function futureValue(currentValue, monthlyContribution, months, annualRate) {
   const rate = monthlyRate(annualRate);
 
   if (rate === 0) {
@@ -315,28 +387,36 @@ function futureValue(currentValue, monthlyContribution, years, annualRate) {
     monthlyContribution * ((((1 + rate) ** months) - 1) / rate);
 }
 
-function principalValue(totalDeposits, monthlyContribution, years) {
-  return totalDeposits + monthlyContribution * years * 12;
+function principalValue(totalDeposits, monthlyContribution, months) {
+  return totalDeposits + monthlyContribution * months;
 }
 
-function yearlySeries(values, annualRate) {
+function chartMonthPoints(targetMonths) {
   const points = [];
-  for (let year = 0; year <= values.targetYears; year += 1) {
-    points.push(futureValue(values.currentValue, values.monthlyContribution, year, annualRate));
+  for (let months = 0; months <= targetMonths; months += 12) {
+    points.push(months);
+  }
+
+  if (points.at(-1) !== targetMonths) {
+    points.push(targetMonths);
   }
   return points;
 }
 
-function principalSeries(values) {
-  const points = [];
-  for (let year = 0; year <= values.targetYears; year += 1) {
-    points.push(principalValue(values.totalDeposits, values.monthlyContribution, year));
-  }
-  return points;
+function monthlySeries(values, annualRate, monthPoints = chartMonthPoints(values.targetMonths)) {
+  return monthPoints.map((months) => {
+    return futureValue(values.currentValue, values.monthlyContribution, months, annualRate);
+  });
+}
+
+function principalSeries(values, monthPoints = chartMonthPoints(values.targetMonths)) {
+  return monthPoints.map((months) => {
+    return principalValue(values.totalDeposits, values.monthlyContribution, months);
+  });
 }
 
 function requiredMonthlyContribution(values, annualRate) {
-  const months = values.targetYears * 12;
+  const months = values.targetMonths;
   const rate = monthlyRate(annualRate);
   const currentValueFuture = rate === 0
     ? values.currentValue
@@ -353,7 +433,7 @@ function requiredAnnualRate(values) {
   const zeroRateValue = futureValue(
     values.currentValue,
     values.monthlyContribution,
-    values.targetYears,
+    values.targetMonths,
     0
   );
 
@@ -363,11 +443,11 @@ function requiredAnnualRate(values) {
 
   let low = 0;
   let high = 100;
-  let highValue = futureValue(values.currentValue, values.monthlyContribution, values.targetYears, high);
+  let highValue = futureValue(values.currentValue, values.monthlyContribution, values.targetMonths, high);
 
   while (highValue < values.targetAmount && high < 1000) {
     high *= 2;
-    highValue = futureValue(values.currentValue, values.monthlyContribution, values.targetYears, high);
+    highValue = futureValue(values.currentValue, values.monthlyContribution, values.targetMonths, high);
   }
 
   if (highValue < values.targetAmount) {
@@ -376,7 +456,7 @@ function requiredAnnualRate(values) {
 
   for (let i = 0; i < 80; i += 1) {
     const mid = (low + high) / 2;
-    const midValue = futureValue(values.currentValue, values.monthlyContribution, values.targetYears, mid);
+    const midValue = futureValue(values.currentValue, values.monthlyContribution, values.targetMonths, mid);
     if (midValue >= values.targetAmount) {
       high = mid;
     } else {
@@ -391,7 +471,7 @@ function getScenarioResults(values) {
   const rates = [values.rate1, values.rate2, values.rate3];
 
   return rates.map((rate) => {
-    const future = futureValue(values.currentValue, values.monthlyContribution, values.targetYears, rate);
+    const future = futureValue(values.currentValue, values.monthlyContribution, values.targetMonths, rate);
     const difference = future - values.targetAmount;
     const requiredMonthly = requiredMonthlyContribution(values, rate);
     const additional = Math.max(0, requiredMonthly - values.monthlyContribution);
@@ -402,7 +482,7 @@ function getScenarioResults(values) {
       difference,
       requiredMonthly,
       additional,
-      series: yearlySeries(values, rate),
+      series: monthlySeries(values, rate),
       achieved: difference >= 0
     };
   });
@@ -416,7 +496,7 @@ function getIncreaseScenarioResults(values) {
     const monthlyContribution = values.monthlyContribution + increase;
     const label = index === 0 ? "現在のまま" : `+${formatYen(increase)}`;
     const predictions = rates.map((rate) => {
-      const future = futureValue(values.currentValue, monthlyContribution, values.targetYears, rate);
+      const future = futureValue(values.currentValue, monthlyContribution, values.targetMonths, rate);
       return {
         rate,
         future,
@@ -486,10 +566,20 @@ function renderSummary(values) {
   `).join("");
 }
 
+function renderTargetPeriodSummary(values) {
+  if (values.targetMonths <= 0) {
+    targetPeriodSummary.textContent = "残り期間：目標達成年月は現在より後の年月を入力してください。";
+    return;
+  }
+
+  targetPeriodSummary.textContent = `残り期間：${formatDurationMonths(values.targetMonths)}`;
+}
+
 function renderConditionSummary(values) {
   const items = [
     ["目標金額", formatYen(values.targetAmount)],
-    ["目標年数", `${values.targetYears}年`],
+    ["目標達成年月", formatYearMonth(values.targetYearMonth)],
+    ["残り期間", formatDurationMonths(values.targetMonths)],
     ["現在評価額合計", formatYen(values.currentValue)],
     ["毎月積立額合計", formatYen(values.monthlyContribution)],
     ["基準利回り", formatPercent(values.rate2)]
@@ -517,7 +607,7 @@ function renderJudgement(values, results) {
 
   judgementCard.innerHTML = `
     <h2>判定カード</h2>
-    <p>年利${formatPercent(base.rate)}の場合、${values.targetYears}年後は${formatYen(base.future)}。</p>
+    <p>年利${formatPercent(base.rate)}の場合、目標達成月時点は${formatYen(base.future)}。</p>
     <p>目標金額に対して${diffText}。${statusText}</p>
   `;
 }
@@ -525,7 +615,7 @@ function renderJudgement(values, results) {
 function renderRequiredRate(values) {
   const requiredRate = requiredAnnualRate(values);
   const body = requiredRate === null
-    ? "現在の毎月積立額では、非常に高い利回りを想定しても目標達成が難しい条件です。目標年数や積立額の見直しを検討してください。"
+    ? "現在の毎月積立額では、非常に高い利回りを想定しても目標達成が難しい条件です。残り期間や積立額の見直しを検討してください。"
     : `現在の毎月積立額で目標達成するには、年利${formatPercent(requiredRate)}が必要です。`;
 
   requiredRateCard.innerHTML = `
@@ -598,7 +688,7 @@ function renderIncreaseScenarioSummary(values, scenarioResults) {
   } else if (firstAchievedScenario) {
     message = `年利${formatPercent(baseRate)}を基準にした場合、現在の積立額では目標未達です。月${formatYen(firstAchievedScenario.increase)}増額すると目標達成見込みです。`;
   } else {
-    message = `年利${formatPercent(baseRate)}を基準にした場合、設定した増額シナリオでは目標未達です。さらに大きな増額、目標年数、目標金額の見直しを検討してください。`;
+    message = `年利${formatPercent(baseRate)}を基準にした場合、設定した増額シナリオでは目標未達です。さらに大きな増額、残り期間、目標金額の見直しを検討してください。`;
   }
 
   increaseScenarioSummary.innerHTML = `
@@ -676,10 +766,11 @@ function renderCharts(values, results, increaseScenarioResults) {
   achievementChartFallback.classList.remove("is-visible");
   increaseScenarioChartFallback.classList.remove("is-visible");
 
-  const labels = Array.from({ length: values.targetYears + 1 }, (_, index) => `${index}年`);
+  const monthPoints = chartMonthPoints(values.targetMonths);
+  const labels = monthPoints.map(durationPointLabel);
   const colors = ["#2f80ed", "#157a6e", "#d97706"];
-  const targetLine = Array(values.targetYears + 1).fill(values.targetAmount);
-  const principal = principalSeries(values);
+  const targetLine = Array(monthPoints.length).fill(values.targetAmount);
+  const principal = principalSeries(values, monthPoints);
 
   const lineData = {
     labels,
@@ -694,7 +785,7 @@ function renderCharts(values, results, increaseScenarioResults) {
       },
       ...results.map((result, index) => ({
         label: `年利${formatPercent(result.rate)}`,
-        data: result.series,
+        data: monthlySeries(values, result.rate, monthPoints),
         borderColor: colors[index],
         backgroundColor: colors[index],
         tension: 0.25
@@ -713,7 +804,7 @@ function renderCharts(values, results, increaseScenarioResults) {
   const achievementData = {
     labels: ["元本", ...results.map((result) => `年利${formatPercent(result.rate)}`), "目標金額"],
     datasets: [{
-      label: "目標年の予測額",
+      label: "目標達成月時点の予測額",
       data: [principal.at(-1), ...results.map((result) => result.future), values.targetAmount],
       backgroundColor: ["#64748b", ...colors, "#b91c1c"],
       borderRadius: 4
@@ -727,13 +818,13 @@ function renderCharts(values, results, increaseScenarioResults) {
       "目標金額"
     ],
     datasets: [{
-      label: `年利${formatPercent(baseRate)}の目標年予測`,
+      label: `年利${formatPercent(baseRate)}の目標達成月時点予測`,
       data: [
         ...increaseScenarioResults.map((scenario) => {
           return futureValue(
             values.currentValue,
             scenario.monthlyContribution,
-            values.targetYears,
+            values.targetMonths,
             baseRate
           );
         }),
@@ -763,7 +854,7 @@ function renderCharts(values, results, increaseScenarioResults) {
   increaseScenarioChart = new Chart(document.getElementById("increaseScenarioChart"), {
     type: "bar",
     data: increaseScenarioData,
-    options: chartOptions("入金額を増やした場合の目標年予測")
+    options: chartOptions("入金額を増やした場合の目標達成月時点予測")
   });
 }
 
@@ -772,6 +863,7 @@ function render() {
   readIncreaseScenarioInputs();
 
   const values = calculationValues();
+  renderTargetPeriodSummary(values);
   renderFundsTable();
   renderSummary(values);
   renderConditionSummary(values);

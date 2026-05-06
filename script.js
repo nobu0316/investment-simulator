@@ -45,6 +45,7 @@ const fundTableBody = document.getElementById("fundTableBody");
 const resetButton = document.getElementById("resetButton");
 const fundSubmitButton = document.getElementById("fundSubmitButton");
 const fundCancelButton = document.getElementById("fundCancelButton");
+const tabNav = document.querySelector(".tab-nav");
 const tabButtons = document.querySelectorAll(".tab-button");
 const tabPanels = document.querySelectorAll(".tab-panel");
 const scenarioChartDetails = document.querySelector(".scenario-chart-details");
@@ -183,9 +184,11 @@ function migrateSavedData(saved) {
     return cloneData(defaults);
   }
 
-  const migratedTargetYearMonth = saved.targetYearMonth || (
-    saved.targetYears
-      ? addMonthsToYearMonth(currentYearMonth(), Math.floor(normalizeNumber(saved.targetYears)) * 12)
+  const savedTargetYearMonth = parseYearMonth(saved.targetYearMonth) ? saved.targetYearMonth : "";
+  const savedTargetYears = normalizeNumber(saved.targetYears);
+  const migratedTargetYearMonth = savedTargetYearMonth || (
+    savedTargetYears > 0
+      ? addMonthsToYearMonth(currentYearMonth(), Math.floor(savedTargetYears) * 12)
       : defaults.targetYearMonth
   );
 
@@ -238,8 +241,12 @@ function migrateSavedData(saved) {
 
 function saveState() {
   if (isBootstrapping && !hadSavedData) return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  hadSavedData = true;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    hadSavedData = true;
+  } catch {
+    errorMessage.textContent = "入力内容をブラウザに保存できませんでした。画面表示と計算は続行できます。";
+  }
 }
 
 function loadState() {
@@ -397,7 +404,7 @@ function chartMonthPoints(targetMonths) {
     points.push(months);
   }
 
-  if (points.at(-1) !== targetMonths) {
+  if (points[points.length - 1] !== targetMonths) {
     points.push(targetMonths);
   }
   return points;
@@ -805,7 +812,7 @@ function renderCharts(values, results, increaseScenarioResults) {
     labels: ["元本", ...results.map((result) => `年利${formatPercent(result.rate)}`), "目標金額"],
     datasets: [{
       label: "目標達成月時点の予測額",
-      data: [principal.at(-1), ...results.map((result) => result.future), values.targetAmount],
+      data: [principal[principal.length - 1], ...results.map((result) => result.future), values.targetAmount],
       backgroundColor: ["#64748b", ...colors, "#b91c1c"],
       borderRadius: 4
     }]
@@ -895,12 +902,20 @@ function render() {
   renderResultTable(results);
   renderIncreaseScenarioSummary(values, increaseScenarioResults);
   renderIncreaseScenarioTable(values, increaseScenarioResults);
-  renderCharts(values, results, increaseScenarioResults);
+  try {
+    renderCharts(values, results, increaseScenarioResults);
+  } catch {
+    showChartFallback();
+  }
 }
 
 function activateTab(tabId) {
+  const targetPanel = document.getElementById(tabId);
+  if (!targetPanel) return;
+
   tabButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.tab === tabId);
+    button.setAttribute("aria-selected", String(button.dataset.tab === tabId));
   });
   tabPanels.forEach((panel) => {
     panel.classList.toggle("is-active", panel.id === tabId);
@@ -950,12 +965,20 @@ increaseScenarioFields.forEach((id) => {
   getElement(id).addEventListener("input", render);
 });
 
-tabButtons.forEach((button) => {
-  button.addEventListener("click", () => activateTab(button.dataset.tab));
-});
+if (tabNav) {
+  tabNav.addEventListener("click", (event) => {
+    const button = event.target.closest(".tab-button[data-tab]");
+    if (!button || !tabNav.contains(button)) return;
+    event.preventDefault();
+    activateTab(button.dataset.tab);
+  });
+}
 
 document.querySelectorAll("[data-go-tab]").forEach((button) => {
-  button.addEventListener("click", () => activateTab(button.dataset.goTab));
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    activateTab(button.dataset.goTab);
+  });
 });
 
 fundForm.addEventListener("submit", (event) => {
@@ -995,12 +1018,18 @@ fundTableBody.addEventListener("click", (event) => {
 
 fundCancelButton.addEventListener("click", resetFundForm);
 
-scenarioChartDetails.addEventListener("toggle", () => {
-  if (increaseScenarioChart) increaseScenarioChart.resize();
-});
+if (scenarioChartDetails) {
+  scenarioChartDetails.addEventListener("toggle", () => {
+    if (increaseScenarioChart) increaseScenarioChart.resize();
+  });
+}
 
 resetButton.addEventListener("click", () => {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    errorMessage.textContent = "保存済みデータを削除できませんでした。";
+  }
   Object.assign(state, cloneData(defaults));
   writeTargetInputs();
   writeIncreaseScenarioInputs();

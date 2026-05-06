@@ -77,6 +77,8 @@ h2 {
 }
 
 .tab-nav {
+  position: relative;
+  z-index: 20;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
@@ -89,14 +91,17 @@ h2 {
 }
 
 .tab-button {
-  min-height: 46px;
-  padding: 0 12px;
+  min-height: 48px;
+  padding: 10px 12px;
   border: 0;
   border-radius: 6px;
   color: var(--muted);
   background: transparent;
   cursor: pointer;
   font-weight: 800;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tab-button:hover,
@@ -107,6 +112,8 @@ h2 {
 
 .tab-panel {
   display: none;
+  position: relative;
+  z-index: 1;
 }
 
 .tab-panel.is-active {
@@ -667,7 +674,8 @@ tr:last-child td {
   }
 
   .tab-button {
-    min-height: 42px;
+    min-height: 48px;
+    padding: 10px 12px;
   }
 }
 
